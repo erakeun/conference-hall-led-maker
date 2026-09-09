@@ -13,7 +13,8 @@
     "format": "oxfmt",
     "test:templates": "node tests/template-regression.mjs",
     "test:editor": "node tests/editor-behavior.mjs",
-    "test": "npm run test:templates && npm run test:editor"
+    "test:presets": "node tests/content-presets.mjs",
+    "test": "npm run test:templates && npm run test:editor && npm run test:presets"
   },
   "dependencies": {
     "@base-ui/react": "1.7.0",

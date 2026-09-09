@@ -6,6 +6,7 @@ import pptxgen from 'pptxgenjs';
 import { AlertTriangle, AlignCenter, AlignLeft, AlignRight, Bold, Check, ChevronDown, Copy, FileImage, FileText, Lock, LockOpen, Minus, Move, Plus, Redo2, RotateCcw, Save, Trash2, Undo2, Upload } from 'lucide-react';
 import { contrastRatio, TEMPLATE_IDS, TEMPLATES, titlePlan, validateTemplate } from '@/lib/template-config.js';
 import { EDITABLE_KINDS, FONT_LIMITS, LED, REQUIRED_KINDS, TEXT_KINDS, clampElement, elementDefaults, isInsideSafeMargin, layerValue, materializeElements, nudgeElement, resizeElement, snapPosition } from '@/lib/editor-model.js';
+import { CONTENT_PRESETS } from '@/lib/content-presets.js';
 
 const PPT = { width: 9215438 / 914400, height: 2592388 / 914400, ledHeight: (9215438 / 914400) / 10 };
 const COLORS = [
@@ -26,9 +27,11 @@ type Draft = {
   templateEdits: Partial<Record<TemplateId, Record<string, ElementOverride>>>; templateCopies: Partial<Record<TemplateId, ElementState[]>>;
   locked: boolean; name: string;
 };
+type ContentPreset = { id: string; name: string; eyebrow: string; template: TemplateId; accent: string; fields: Pick<Draft, 'title' | 'subtitle' | 'date' | 'start' | 'end' | 'venue' | 'host' | 'organizer' | 'extra'> };
 type Guide = { axis: 'x' | 'y'; value: number };
 type Gesture = { type: 'move' | 'resize'; id: string; offsetX: number; offsetY: number; startX: number; startWidth: number; original: Draft };
 const templateIds = TEMPLATE_IDS as TemplateId[];
+const contentPresets = CONTENT_PRESETS as ContentPreset[];
 
 const defaults = (): Draft => ({
   title: '2026 ERICA INNOVATION FORUM', subtitle: '', date: '2026-09-09', start: '14:00', end: '', venue: '컨퍼런스홀 중강당',
@@ -266,6 +269,12 @@ export default function Home() {
   ];
   const canExport = !warnings.overflow;
   const switchTemplate = (template: TemplateId) => { save({ ...draft, template }); setSelected(null); };
+  const applyPreset = (preset: ContentPreset) => {
+    const templateEdits = { ...draft.templateEdits }, templateCopies = { ...draft.templateCopies };
+    delete templateEdits[preset.template]; delete templateCopies[preset.template];
+    save({ ...draft, ...preset.fields, template: preset.template, mode: 'simple', templateEdits, templateCopies });
+    setSelected(null); setNotice(`${preset.name} 프리셋을 적용했습니다`);
+  };
   const resetElementPosition = () => {
     if (!selectedElement) return; clearElementFields(selectedElement.id, ['x', 'y', 'width', 'height']);
   };
@@ -323,6 +332,7 @@ export default function Home() {
     <header className="app-header"><div className="brand-mark"><span className="h">H</span><span>HANYANG UNIVERSITY<br /><b>ERICA</b></span></div><div><p className="eyebrow">FACILITY OPERATIONS TOOL · v2.2</p><h1>컨퍼런스홀 LED 현수막 제작기</h1></div><div className="header-status">2560 × 256 · 공식 PPTX 규격</div></header>
     <div className="workspace"><aside className="editor-panel">
       <section className="paste-panel"><div className="section-title"><b>QUICK START</b><span>행사명 · 일시 · 장소</span></div><textarea value={pasted} onChange={event => setPasted(event.target.value)} placeholder={'행사명\n2026. 9. 15. 14:00~17:00\n컨퍼런스홀 중강당'} /><button className="ghost-button" onClick={parse}>정보 자동 분리</button><label>행사명<input value={draft.title} onChange={event => update('title', event.target.value)} /></label><div className="field-row"><label>날짜<input type="date" value={draft.date} onChange={event => update('date', event.target.value)} /></label><label>시작<input type="time" value={draft.start} onChange={event => update('start', event.target.value)} /></label></div><label>장소<input value={draft.venue} onChange={event => update('venue', event.target.value)} /></label></section>
+      <section className="preset-section"><div className="section-heading"><div><b>추천 내용 프리셋</b><span>문구와 디자인을 한 번에 적용</span></div><em>{contentPresets.length}종</em></div><div className="preset-grid">{contentPresets.map(preset => <button className="content-preset" style={{ borderTopColor: preset.accent }} onClick={() => applyPreset(preset)} key={preset.id}><span>{preset.eyebrow}</span><strong>{preset.fields.title}</strong><small><i style={{ background: preset.accent }} />{preset.name} · {TEMPLATES[preset.template].name}</small></button>)}</div></section>
       {['ERICA MODERN', '시설팀 기존 양식'].map(group => <section className="input-section" key={group}><div className="section-heading"><b>{group}</b><em>{cards(group).length}종</em></div><div className="template-grid">{cards(group).map(id => <button className={`template-card ${id} ${draft.template === id ? 'active' : ''}`} onClick={() => switchTemplate(id)} key={id}><i style={{ background: `linear-gradient(90deg,${TEMPLATES[id].palette.background} 64%,${TEMPLATES[id].palette.accent} 64%)` }} /><strong>{TEMPLATES[id].name}</strong><small>{TEMPLATES[id].use}</small></button>)}</div></section>)}
       <section className="accordion"><button onClick={() => setAdvanced(!advanced)}><span>내용 및 이미지</span><ChevronDown className={advanced ? 'open' : ''} size={17} /></button>{advanced && <div className="accordion-content"><label>부제<input value={draft.subtitle} onChange={event => update('subtitle', event.target.value)} /></label><label>종료 시간<input type="time" value={draft.end} onChange={event => update('end', event.target.value)} /></label><label>주최<input value={draft.host} onChange={event => update('host', event.target.value)} /></label><label>주관<input value={draft.organizer} onChange={event => update('organizer', event.target.value)} /></label><label>추가 문구<input value={draft.extra} onChange={event => update('extra', event.target.value)} /></label><label>글꼴<select value={draft.font} onChange={event => update('font', event.target.value)}><option>Arial</option><option>Malgun Gothic</option><option>Georgia</option></select></label><label>배경/키비주얼<input type="file" accept="image/*" onChange={event => image(event, true)} /></label><label>외부기관 로고<input type="file" accept="image/*" onChange={event => image(event, false)} /></label></div>}</section>
       <section className="work-tools"><input ref={workFile} type="file" hidden accept=".json,application/json" onChange={loadJson} /><button onClick={saveJson}><Save size={14} /> JSON 저장</button><button onClick={() => workFile.current?.click()}><Upload size={14} /> 불러오기</button><button onClick={undo} disabled={!history.length}><Undo2 size={14} /> Undo</button><button onClick={redo} disabled={!future.length}><Redo2 size={14} /> Redo</button></section>
