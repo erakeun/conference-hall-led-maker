@@ -1,28 +1,162 @@
 'use client';
-import './upgrade.css';
-import {ChangeEvent,PointerEvent,useEffect,useMemo,useRef,useState} from 'react';
-import pptxgen from 'pptxgenjs';
-import {Check,AlertTriangle,ChevronDown,FileImage,FileText,Lock,LockOpen,Redo2,RotateCcw,Save,Undo2,Upload} from 'lucide-react';
 
-const LED={w:2560,h:256};
-// Official supplied PPTX: 9,215,438 × 2,592,388 EMU. LED is the top 10:1 area.
-const PPT={w:9215438/914400,h:2592388/914400,ledH:(9215438/914400)/10};
-type Tpl='standard'|'blue'|'minimal'|'split'|'photo'|'ceremony'|'legacy'|'legacyWhite'|'legacyCenter'|'legacyRight'|'legacyTwoBlue'|'legacyTwoWhite';
-type Key='title'|'subtitle'|'meta'|'host';type Pos={x:number;y:number;lock:boolean};
-type Draft={title:string;subtitle:string;date:string;start:string;end:string;venue:string;host:string;organizer:string;template:Tpl;accent:string;font:string;size:number;align:'left'|'center';background:string|null;fit:'cover'|'contain';logos:string[];positions:Record<Key,Pos>;locked:boolean;name:string};
-const base=():Draft=>({title:'2026 ERICA INNOVATION FORUM',subtitle:'',date:'2026-09-09',start:'14:00',end:'',venue:'컨퍼런스홀 중강당',host:'HANYANG UNIVERSITY ERICA',organizer:'',template:'standard',accent:'#0e4a84',font:'Arial',size:76,align:'left',background:null,fit:'cover',logos:[],positions:{title:{x:6,y:53,lock:false},subtitle:{x:6,y:18,lock:false},meta:{x:6,y:86,lock:false},host:{x:94,y:86,lock:false}},locked:false,name:''});
-const modern:[Tpl,string,string][]=[['standard','ERICA STANDARD','공식행사'],['blue','ERICA BLUE','주요 행사'],['minimal','MINIMAL WHITE','포럼'],['split','SPLIT','긴 제목'],['photo','PHOTO','키비주얼'],['ceremony','CEREMONY','개회식']];
-const facility:[Tpl,string,string][]=[['legacy','LEGACY BLUE','원본 p.2'],['legacyWhite','LEGACY WHITE','원본 p.3'],['legacyCenter','LEGACY CENTER','원본 p.4'],['legacyRight','LEGACY RIGHT','원본 p.5'],['legacyTwoBlue','LEGACY TWO BLUE','원본 p.6'],['legacyTwoWhite','LEGACY TWO WHITE','원본 p.7']];
-const clean=(v:string)=>v.replace(/[\\/:*?"<>|]/g,'').trim().replace(/\s+/g,'_').slice(0,42)||'LED_현수막';
-const line=(d:Draft)=>{const [y,m,day]=d.date.split('-'),w=['일','월','화','수','목','금','토'][new Date(`${d.date}T12:00`).getDay()];return d.date?`${y}. ${+m}. ${+day}.(${w}) ${[d.start,d.end].filter(Boolean).join('~')}`:''};
-const spec=(d:Draft)=>{const n=d.title.replace(/\s/g,'').length,a=d.title.split(/\s+/);const lines=n>34&&a.length>2?[a.slice(0,Math.ceil(a.length/2)).join(' '),a.slice(Math.ceil(a.length/2)).join(' ')]:[d.title||'행사명을 입력하세요'];return{lines,size:Math.min(d.size,n>52?42:n>34?58:d.size),bad:n>82}};
-const isLegacy=(t:Tpl)=>t.startsWith('legacy'),isDark=(t:Tpl)=>['blue','photo','ceremony','legacy','legacyTwoBlue'].includes(t);
-function draw(c:HTMLCanvasElement,d:Draft){const g=c.getContext('2d');if(!g)return;c.width=LED.w;c.height=LED.h;const W=LED.w,H=LED.h,legacy=isLegacy(d.template),dark=isDark(d.template),fg=legacy?'#fff':dark?'#fff':'#132033',muted=legacy?'#fff':dark?'#dce8f3':'#526474';g.fillStyle='#fff';g.fillRect(0,0,W,H);if(d.template==='blue'||d.template==='photo'||d.template==='ceremony'){g.fillStyle=d.template==='ceremony'?'#142439':'#0d3968';g.fillRect(0,0,W,H)}if(d.template==='photo'&&d.background){const im=new Image();im.src=d.background;if(im.complete&&im.naturalWidth)g.drawImage(im,0,0,W,H);g.fillStyle='rgba(8,21,37,.5)';g.fillRect(0,0,W,H)}if(d.template==='standard'){g.fillStyle=d.accent;g.fillRect(0,0,28,H)}if(d.template==='split'){g.fillStyle=d.accent;g.fillRect(W*.65,0,W*.35,H)}if(d.template==='minimal'){g.fillStyle='#f6f9fb';g.fillRect(0,0,W,H)}if(legacy){const blue=d.template!=='legacyWhite'&&d.template!=='legacyTwoWhite';g.fillStyle=blue?(d.template==='legacyTwoBlue'?'#347db5':'#125285'):'#fff';g.fillRect(0,0,W,blue?112:110);g.fillStyle='#125285';g.fillRect(0,120,W,8);g.fillRect(0,133,W,8);if(!blue){g.fillStyle='#b6d333';g.fillRect(W-300,110,300,9)}}const xy=(k:Key)=>[d.positions[k].x*W/100,d.positions[k].y*H/100] as const,s=spec(d),[tx,ty]=xy('title');g.textAlign=d.align;g.textBaseline='middle';g.fillStyle=fg;g.font=`800 ${s.size}px ${d.font}, Arial`;s.lines.forEach((v,i)=>g.fillText(v,tx,ty+(i-(s.lines.length-1)/2)*s.size,legacy?W*.82:W*.84));if(d.subtitle){const [x,y]=xy('subtitle');g.font=`600 17px ${d.font}`;g.fillStyle=muted;g.fillText(d.subtitle,x,y,W*.8)}const [mx,my]=xy('meta');g.font=`600 21px ${d.font}`;g.fillStyle=muted;g.fillText([line(d),d.venue].filter(Boolean).join('  ·  '),mx,my,W*.8);const [hx,hy]=xy('host');g.textAlign='right';g.font=`700 15px ${d.font}`;g.fillText([d.host,d.organizer].filter(Boolean).join('  |  '),hx,hy,600);if(!legacy){g.fillStyle=dark?'#fff':d.accent;g.font='800 16px Arial';g.fillText('HANYANG UNIVERSITY ERICA',W-80,31)}d.logos.forEach((src,i)=>{const im=new Image();im.src=src;if(im.complete&&im.naturalWidth){const h=46,w=Math.min(170,h*im.naturalWidth/im.naturalHeight);g.drawImage(im,W-270-i*180,48,w,h)}})}
-function Canvas({d,onMove}:{d:Draft;onMove:(k:Key,x:number,y:number)=>void}){const ref=useRef<HTMLCanvasElement>(null),[drag,setDrag]=useState<Key|null>(null);useEffect(()=>{if(ref.current)draw(ref.current,d)},[d]);const move=(e:PointerEvent<HTMLDivElement>)=>{if(!drag||d.locked||d.positions[drag].lock)return;const r=e.currentTarget.getBoundingClientRect();onMove(drag,Math.max(4,Math.min(96,(e.clientX-r.left)*100/r.width)),Math.max(8,Math.min(92,(e.clientY-r.top)*100/r.height)))};return <div className="canvas-wrap led-stage" onPointerMove={move} onPointerUp={()=>setDrag(null)}><canvas ref={ref} className="led-canvas"/>{(Object.keys(d.positions) as Key[]).map(k=><button key={k} className="drag-dot" title={`${k} 드래그 이동`} style={{left:`${d.positions[k].x}%`,top:`${d.positions[k].y}%`}} onPointerDown={e=>{e.currentTarget.setPointerCapture(e.pointerId);setDrag(k)}}/>)}</div>}
-export default function Home(){const[d,setD]=useState<Draft>(base),[advanced,setAdvanced]=useState(false),[paste,setPaste]=useState(''),[safe,setSafe]=useState(false),[hist,setHist]=useState<Draft[]>([]),[future,setFuture]=useState<Draft[]>([]),[busy,setBusy]=useState(false),[notice,setNotice]=useState('');const file=useRef<HTMLInputElement>(null);useEffect(()=>{try{const v=localStorage.getItem('erica-led-v2');if(v)setD({...base(),...JSON.parse(v)})}catch{}},[]);useEffect(()=>localStorage.setItem('erica-led-v2',JSON.stringify(d)),[d]);const save=(n:Draft)=>{setHist(h=>[d,...h].slice(0,10));setFuture([]);setD(n)},up=<K extends keyof Draft>(k:K,v:Draft[K])=>save({...d,[k]:v}),move=(k:Key,x:number,y:number)=>save({...d,positions:{...d.positions,[k]:{...d.positions[k],x,y}}});const report=useMemo(()=>[{n:'출력 규격',ok:true,v:'2560 × 256 px'},{n:'송출영역',ok:true,v:'공식 PPTX 상단 10:1 영역'},{n:'행사명 가독성',ok:!spec(d).bad,v:spec(d).bad?'문구가 너무 길어 출력 차단':'자동 축소 / 2줄 처리'},{n:'레이아웃',ok:true,v:d.locked?'전체 잠금':'드래그 이동 가능'}],[d]);const can=report.every(v=>v.ok);
- const parse=()=>{const l=paste.split(/\n+/).map(v=>v.trim()).filter(Boolean),n={...d},date=l.find(v=>/20\d{2}[.\-/년]/.test(v)),venue=l.find(v=>/중강당|강당|컨퍼런스홀|홀/.test(v)),title=l.find(v=>v!==date&&v!==venue&& !/^주[최관]/.test(v));if(title)n.title=title.replace(/^행사명[:：]?/,'');if(venue)n.venue=venue.replace(/^장소[:：]?/,'');if(date){const m=date.replace(/[년월]/g,'.').match(/(20\d{2})\D+(\d{1,2})\D+(\d{1,2})/);if(m)n.date=`${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`;const t=date.match(/\d{1,2}:\d{2}/g);if(t?.[0])n.start=t[0];if(t?.[1])n.end=t[1]}save(n)};
- const image=(e:ChangeEvent<HTMLInputElement>,bg:boolean)=>{const f=e.target.files?.[0];if(!f)return;const r=new FileReader();r.onload=()=>save(bg?{...d,background:String(r.result)}:{...d,logos:[...d.logos.slice(0,3),String(r.result)]});r.readAsDataURL(f)};
- const png=()=>{if(!can||busy)return;setBusy(true);const c=document.createElement('canvas');draw(c,d);c.toBlob(b=>{if(b){const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=`${clean(d.name||d.title)}.png`;a.click();URL.revokeObjectURL(a.href)}setBusy(false)},'image/png')};
- const ppt=async()=>{if(!can||busy)return;setBusy(true);try{const p=new pptxgen();p.defineLayout({name:'OFFICIAL_LED',width:PPT.w,height:PPT.h});p.layout='OFFICIAL_LED';const s=p.addSlide(),legacy=isLegacy(d.template),dark=isDark(d.template),bg=legacy?(d.template==='legacyWhite'||d.template==='legacyTwoWhite'?'FFFFFF':'125285'):d.template==='blue'?'0D3968':d.template==='ceremony'?'142439':'FFFFFF';s.background={color:bg};if(legacy){s.addShape(p.ShapeType.rect,{x:0,y:0,w:PPT.w,h:.5,fill:{color:bg},line:{color:bg}});s.addShape(p.ShapeType.line,{x:0,y:.5,w:PPT.w,h:0,line:{color:'125285',width:1}})}const x=(k:Key,w:number)=>Math.max(0,Math.min(PPT.w-w,d.positions[k].x*PPT.w/100-(d.align==='center'?w/2:0))),y=(k:Key,h:number)=>Math.max(0,Math.min(PPT.ledH-h,d.positions[k].y*PPT.ledH/100-h/2)),sp=spec(d);s.addText(d.title||'행사명을 입력하세요',{x:x('title',8.6),y:y('title',sp.lines.length>1?.46:.3),w:8.6,h:sp.lines.length>1?.46:.3,fontFace:d.font,fontSize:Math.max(18,sp.size*.38),bold:true,color:dark||legacy?'FFFFFF':'132033',margin:0,fit:'shrink',align:d.align});s.addText([line(d),d.venue].filter(Boolean).join('  ·  '),{x:x('meta',7.4),y:y('meta',.12),w:7.4,h:.12,fontFace:d.font,fontSize:8.2,color:dark||legacy?'DCE7F2':'526474',margin:0,fit:'shrink'});s.addText([d.host,d.organizer].filter(Boolean).join('  |  '),{x:6.8,y:y('host',.12),w:2.9,h:.12,fontFace:d.font,fontSize:6.5,bold:true,color:dark||legacy?'FFFFFF':d.accent.slice(1),margin:0,align:'right'});await p.writeFile({fileName:`${clean(d.name||d.title)}_수정용.pptx`});setNotice('PPTX 생성 완료: 공식 원본 슬라이드 크기와 일치')}finally{setBusy(false)}};
- const choose=(t:Tpl)=>save({...d,template:t,accent:t.startsWith('legacy')?'#125285':t==='ceremony'?'#ad8a57':'#0e4a84',align:t.startsWith('legacy')?'center':'left',positions:{...d.positions,title:{...d.positions.title,x:t.startsWith('legacy')?50:6,y:t.includes('Two')?42:53},meta:{...d.positions.meta,x:t.startsWith('legacy')?50:6}}});const undo=()=>{if(!hist.length)return;setFuture(v=>[d,...v]);setD(hist[0]);setHist(v=>v.slice(1))},redo=()=>{if(!future.length)return;setHist(v=>[d,...v]);setD(future[0]);setFuture(v=>v.slice(1))};const json=()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify({version:2,draft:d},null,2)],{type:'application/json'}));a.download=`${clean(d.name||d.title)}.json`;a.click()};const load=(e:ChangeEvent<HTMLInputElement>)=>{const f=e.target.files?.[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{save({...base(),...(JSON.parse(String(r.result)).draft||JSON.parse(String(r.result)))})}catch{setNotice('작업 JSON을 읽지 못했습니다')}};r.readAsText(f)};
- return <main className="app-shell"><header className="app-header"><div className="brand-mark"><b>H</b><span>HANYANG UNIVERSITY<br/><strong>ERICA</strong></span></div><div><p className="eyebrow">FACILITY OPERATIONS TOOL · v2</p><h1>컨퍼런스홀 LED 현수막 제작기</h1></div><div className="header-status">2560 × 256 · 공식 PPTX 규격</div></header><div className="workspace"><aside className="editor-panel"><section className="paste-panel"><div className="section-title"><b>QUICK START</b><span>행사명 · 일시 · 장소</span></div><textarea value={paste} onChange={e=>setPaste(e.target.value)} placeholder={'행사명\n2026. 9. 15. 14:00~17:00\n컨퍼런스홀 중강당\n주최 한양대학교 ERICA'}/><button className="ghost-button" onClick={parse}>정보 자동 분리</button><label>행사명<input value={d.title} onChange={e=>up('title',e.target.value)}/></label><div className="field-row"><label>날짜<input type="date" value={d.date} onChange={e=>up('date',e.target.value)}/></label><label>시작<input type="time" value={d.start} onChange={e=>up('start',e.target.value)}/></label></div><label>장소<input value={d.venue} onChange={e=>up('venue',e.target.value)}/></label></section><section className="input-section"><div className="section-heading"><b>ERICA MODERN</b><em>6종</em></div><div className="template-grid">{modern.map(([t,n,s])=><button className={`template-card ${t} ${d.template===t?'active':''}`} onClick={()=>choose(t)} key={t}><i/><strong>{n}</strong><small>{s}</small></button>)}</div></section><section className="input-section"><div className="section-heading"><b>시설팀 기존 양식</b><em>공식 PPTX 6종</em></div><div className="template-grid">{facility.map(([t,n,s])=><button className={`template-card legacy ${d.template===t?'active':''}`} onClick={()=>choose(t)} key={t}><i/><strong>{n}</strong><small>{s}</small></button>)}</div></section><section className="accordion"><button onClick={()=>setAdvanced(!advanced)}><span>고급 편집</span><ChevronDown size={17}/></button>{advanced&&<div className="accordion-content"><label>부제<input value={d.subtitle} onChange={e=>up('subtitle',e.target.value)}/></label><label>종료 시간<input type="time" value={d.end} onChange={e=>up('end',e.target.value)}/></label><label>주최<input value={d.host} onChange={e=>up('host',e.target.value)}/></label><label>주관<input value={d.organizer} onChange={e=>up('organizer',e.target.value)}/></label><div className="field-row"><label>글꼴<select value={d.font} onChange={e=>up('font',e.target.value)}><option>Arial</option><option>Malgun Gothic</option><option>Georgia</option></select></label><label>제목 크기<input type="range" min="42" max="100" value={d.size} onChange={e=>up('size',+e.target.value)}/></label></div><label>배경 사진<input type="file" accept="image/*" onChange={e=>image(e,true)}/></label><label>외부기관 로고 (최대 4개)<input type="file" accept="image/*" onChange={e=>image(e,false)}/></label><div className="lock-row"><button onClick={()=>up('locked',!d.locked)}>{d.locked?<Lock size={15}/>:<LockOpen size={15}/>}{d.locked?'전체 잠금 해제':'전체 레이아웃 잠금'}</button><button onClick={()=>save({...d,positions:base().positions})}>위치 초기화</button></div></div>}</section><section className="work-tools"><input ref={file} type="file" hidden accept=".json,application/json" onChange={load}/><button onClick={json}><Save size={14}/> JSON 저장</button><button onClick={()=>file.current?.click()}><Upload size={14}/> 불러오기</button><button onClick={undo} disabled={!hist.length}><Undo2 size={14}/> Undo</button><button onClick={redo} disabled={!future.length}><Redo2 size={14}/> Redo</button></section></aside><section className="preview-panel"><div className="preview-toolbar"><div><p className="eyebrow">LIVE PREVIEW</p><h2>실제 송출 영역</h2></div><label className="safe-toggle"><input type="checkbox" checked={safe} onChange={e=>setSafe(e.target.checked)}/> 안전영역 보기</label></div><Canvas d={d} onMove={move}/>{safe&&<div className="safe-guide">공식 PPTX 상단 LED 송출영역 · 10:1</div>}<div className="preview-caption"><b>요소를 드래그해 이동</b><span>안전영역 밖 배치 자동 제한</span></div><details className="check-panel" open><summary>{can?'✓ 출력 준비 완료':'! 출력 전 확인 필요'}</summary>{report.map(v=><div className={`check-item ${v.ok?'':'warning'}`} key={v.n}>{v.ok?<Check size={16}/>:<AlertTriangle size={16}/>}<b>{v.n}</b><span>{v.v}</span></div>)}</details></section></div><footer className="action-bar"><input placeholder="출력 파일명 (선택)" value={d.name} onChange={e=>up('name',e.target.value)}/><button className="reset" onClick={()=>{if(confirm('새 작업을 시작할까요?')){setD(base());setHist([])}}}><RotateCcw size={17}/> 새 작업</button><button className="download secondary" disabled={!can||busy} onClick={ppt}><FileText size={18}/> 수정 가능한 PPTX</button><button className="download" disabled={!can||busy} onClick={png}><FileImage size={18}/> PNG 다운로드</button></footer>{notice&&<p className="notice">{notice}</p>}<p className="facility-note">공식 LED: 6400 × 640mm · 2560 × 256px · PPTX 원본 슬라이드 크기 변경 금지 · 사용 5일 전 시설팀 공문 송부 · 현장지원 4446</p></main>}
+import './upgrade.css';
+import { ChangeEvent, PointerEvent, useEffect, useMemo, useRef, useState } from 'react';
+import pptxgen from 'pptxgenjs';
+import { AlertTriangle, Check, ChevronDown, FileImage, FileText, Lock, LockOpen, Redo2, RotateCcw, Save, Undo2, Upload } from 'lucide-react';
+import { contrastRatio, TEMPLATE_IDS, TEMPLATES, templateDefaults, titlePlan, validateTemplate } from '@/lib/template-config.js';
+
+const LED = { width: 2560, height: 256 };
+const PPT = { width: 9215438 / 914400, height: 2592388 / 914400, ledHeight: (9215438 / 914400) / 10 };
+type TemplateId = (typeof TEMPLATE_IDS)[number];
+type ElementKey = 'title' | 'subtitle' | 'meta' | 'host';
+type Position = { x: number; y: number; lock?: boolean };
+type Positions = Record<ElementKey, Position>;
+type PaletteOverride = { title?: string; subtitle?: string; meta?: string };
+type Draft = {
+  title: string; subtitle: string; date: string; start: string; end: string; venue: string; host: string; organizer: string;
+  template: TemplateId; font: string; size?: number; background: string | null; fit: 'cover' | 'contain'; logos: string[];
+  customPositions: Partial<Record<TemplateId, Positions>>; paletteOverride: PaletteOverride; keepSettings: boolean; locked: boolean; name: string;
+};
+
+const defaults = (): Draft => ({
+  title: '2026 ERICA INNOVATION FORUM', subtitle: '', date: '2026-09-09', start: '14:00', end: '', venue: '컨퍼런스홀 중강당',
+  host: 'HANYANG UNIVERSITY ERICA', organizer: '', template: 'standard', font: 'Arial', background: null, fit: 'cover', logos: [],
+  customPositions: {}, paletteOverride: {}, keepSettings: false, locked: false, name: '',
+});
+const clean = (value: string) => value.replace(/[\\/:*?"<>|]/g, '').trim().replace(/\s+/g, '_').slice(0, 42) || 'LED_현수막';
+const dateLine = (d: Draft) => {
+  if (!d.date) return '';
+  const [year, month, day] = d.date.split('-');
+  const weekday = ['일', '월', '화', '수', '목', '금', '토'][new Date(`${d.date}T12:00`).getDay()];
+  return `${year}. ${Number(month)}. ${Number(day)}.(${weekday}) ${[d.start, d.end].filter(Boolean).join('~')}`.trim();
+};
+const positionsFor = (d: Draft): Positions => (d.customPositions[d.template] || templateDefaults(d.template).positions) as Positions;
+const paletteFor = (d: Draft) => ({ ...TEMPLATES[d.template].palette, ...d.paletteOverride });
+
+function paintBackground(ctx: CanvasRenderingContext2D, d: Draft) {
+  const cfg = TEMPLATES[d.template], palette = paletteFor(d), { width: w, height: h } = LED;
+  ctx.fillStyle = palette.background; ctx.fillRect(0, 0, w, h);
+  if (d.template === 'blue') {
+    const gradient = ctx.createLinearGradient(0, 0, w, h); gradient.addColorStop(0, '#0a3565'); gradient.addColorStop(1, '#071e3b');
+    ctx.fillStyle = gradient; ctx.fillRect(0, 0, w, h);
+  }
+  if (d.template === 'photo') {
+    if (d.background) {
+      const image = new Image(); image.src = d.background;
+      if (image.complete && image.naturalWidth) {
+        const sourceRatio = image.naturalWidth / image.naturalHeight, targetRatio = w / h;
+        let sx = 0, sy = 0, sw = image.naturalWidth, sh = image.naturalHeight;
+        if (d.fit === 'cover') { if (sourceRatio > targetRatio) { sw = image.naturalHeight * targetRatio; sx = (image.naturalWidth - sw) / 2; } else { sh = image.naturalWidth / targetRatio; sy = (image.naturalHeight - sh) / 2; } }
+        ctx.drawImage(image, sx, sy, sw, sh, 0, 0, w, h);
+      }
+    }
+    ctx.fillStyle = `${palette.overlay}${Math.round((palette.overlayOpacity || .58) * 255).toString(16).padStart(2, '0')}`; ctx.fillRect(0, 0, w, h);
+  }
+  for (const shape of cfg.decorations) {
+    if (shape.type === 'gradient') continue;
+    ctx.fillStyle = palette[shape.color] || shape.color || palette.line;
+    ctx.fillRect(shape.x / 100 * w, shape.y / 100 * h, shape.w / 100 * w, Math.max(1, shape.h / 100 * h));
+  }
+}
+
+function draw(canvas: HTMLCanvasElement, d: Draft) {
+  const ctx = canvas.getContext('2d'); if (!ctx) return;
+  canvas.width = LED.width; canvas.height = LED.height; paintBackground(ctx, d);
+  const cfg = TEMPLATES[d.template], palette = paletteFor(d), positions = positionsFor(d), plan = titlePlan(d.title, d.template, d.size);
+  const point = (key: ElementKey) => [positions[key].x / 100 * LED.width, positions[key].y / 100 * LED.height] as const;
+  const width = cfg.layout.titleWidth / 100 * LED.width;
+  ctx.textBaseline = 'top'; ctx.textAlign = cfg.layout.align; ctx.fillStyle = palette.title;
+  ctx.font = `800 ${plan.size}px ${d.font}, Arial, sans-serif`;
+  const [titleX, titleY] = point('title');
+  plan.lines.forEach((text: string, index: number) => ctx.fillText(text, titleX, titleY + index * plan.lineHeight, width));
+  if (d.subtitle) { const [x, y] = point('subtitle'); ctx.fillStyle = palette.subtitle; ctx.font = `600 17px ${d.font}, Arial`; ctx.fillText(d.subtitle, x, y, width); }
+  const [metaX, metaY] = point('meta'); ctx.fillStyle = palette.meta; ctx.font = `600 20px ${d.font}, Arial`; ctx.fillText([dateLine(d), d.venue].filter(Boolean).join('  ·  '), metaX, metaY, width);
+  const [hostX, hostY] = point('host'); ctx.textAlign = 'right'; ctx.font = `700 14px ${d.font}, Arial`; ctx.fillText([d.host, d.organizer].filter(Boolean).join('  |  '), hostX, hostY, 620);
+  if (!d.template.startsWith('legacy')) { ctx.fillStyle = palette.accent; ctx.font = '800 15px Arial'; ctx.fillText('HANYANG UNIVERSITY ERICA', LED.width - 80, 24); }
+  d.logos.forEach((src, index) => { const image = new Image(); image.src = src; if (image.complete && image.naturalWidth) { const h = 44, w = Math.min(160, h * image.naturalWidth / image.naturalHeight); ctx.drawImage(image, LED.width - 270 - index * 175, 45, w, h); } });
+}
+
+function Preview({ draft, onMove }: { draft: Draft; onMove: (key: ElementKey, x: number, y: number) => void }) {
+  const canvas = useRef<HTMLCanvasElement>(null), [dragging, setDragging] = useState<ElementKey | null>(null), positions = positionsFor(draft);
+  useEffect(() => { if (canvas.current) draw(canvas.current, draft); }, [draft]);
+  const move = (event: PointerEvent<HTMLDivElement>) => {
+    if (!dragging || draft.locked || positions[dragging].lock) return;
+    const rect = event.currentTarget.getBoundingClientRect(), cfg = TEMPLATES[draft.template], margin = cfg.layout.safeMargin;
+    onMove(dragging, Math.max(margin, Math.min(100 - margin, (event.clientX - rect.left) / rect.width * 100)), Math.max(margin, Math.min(94, (event.clientY - rect.top) / rect.height * 100)));
+  };
+  return <div className="canvas-wrap led-stage" onPointerMove={move} onPointerUp={() => setDragging(null)}>
+    <canvas ref={canvas} className="led-canvas" aria-label="LED 현수막 미리보기" />
+    {(Object.keys(positions) as ElementKey[]).map(key => <button key={key} className="drag-dot" title={`${key} 위치 이동`} style={{ left: `${positions[key].x}%`, top: `${positions[key].y}%` }} onPointerDown={event => { event.currentTarget.setPointerCapture(event.pointerId); setDragging(key); }} />)}
+  </div>;
+}
+
+export default function Home() {
+  const [draft, setDraft] = useState<Draft>(defaults), [pasted, setPasted] = useState(''), [advanced, setAdvanced] = useState(false), [safe, setSafe] = useState(false);
+  const [history, setHistory] = useState<Draft[]>([]), [future, setFuture] = useState<Draft[]>([]), [busy, setBusy] = useState(false), [notice, setNotice] = useState('');
+  const workFile = useRef<HTMLInputElement>(null), cfg = TEMPLATES[draft.template], positions = positionsFor(draft), palette = paletteFor(draft);
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('erica-led-v3') || localStorage.getItem('erica-led-v2');
+      const old = raw ? JSON.parse(raw) : {}, migrated = { ...defaults(), ...old };
+      if (old.positions) migrated.customPositions = { [old.template || 'standard']: old.positions };
+      const requested = new URLSearchParams(window.location.search).get('template');
+      if (requested && TEMPLATE_IDS.includes(requested)) migrated.template = requested;
+      const requestedTitle = new URLSearchParams(window.location.search).get('title');
+      if (requestedTitle) migrated.title = requestedTitle;
+      setDraft(migrated);
+    } catch {}
+  }, []);
+  useEffect(() => localStorage.setItem('erica-led-v3', JSON.stringify(draft)), [draft]);
+  const save = (next: Draft) => { setHistory(items => [draft, ...items].slice(0, 12)); setFuture([]); setDraft(next); };
+  const update = <K extends keyof Draft>(key: K, value: Draft[K]) => save({ ...draft, [key]: value });
+  const validation = validateTemplate(draft.title, draft.template, positions);
+  const checks = useMemo(() => [
+    { name: '출력 규격', ok: true, value: '2560 × 256 px' },
+    { name: '제목 클리핑', ok: !validation.clipping, value: validation.clipping ? '안전영역 밖으로 나감' : '없음' },
+    { name: '선·제목 충돌', ok: !validation.collision, value: validation.collision ? '배치 초기화 필요' : '없음' },
+    { name: '제목 대비', ok: contrastRatio(palette.title, palette.background) >= 3, value: contrastRatio(palette.title, palette.background) < 3 ? '사용자 지정 색상 대비가 낮음' : '정상' },
+    { name: '최소 글자크기', ok: !validation.overflow, value: validation.overflow ? '제목을 줄여주세요' : `${validation.plan.size}px` },
+  ], [draft, positions, validation]);
+  const canExport = checks.every(item => item.ok);
+  const switchTemplate = (template: TemplateId) => save({ ...draft, template, size: draft.keepSettings ? draft.size : undefined, paletteOverride: draft.keepSettings ? draft.paletteOverride : {} });
+  const move = (key: ElementKey, x: number, y: number) => save({ ...draft, customPositions: { ...draft.customPositions, [draft.template]: { ...positions, [key]: { ...positions[key], x, y } } } });
+  const resetPosition = () => { const next = { ...draft.customPositions }; delete next[draft.template]; save({ ...draft, customPositions: next }); };
+  const parse = () => {
+    const lines = pasted.split(/\n+/).map(value => value.trim()).filter(Boolean), next = { ...draft };
+    const date = lines.find(value => /20\d{2}[.\-/년]/.test(value)), venue = lines.find(value => /중강당|강당|컨퍼런스홀|홀/.test(value)), title = lines.find(value => value !== date && value !== venue && !/^주[최관]/.test(value));
+    if (title) next.title = title.replace(/^행사명\s*[:：]?/, ''); if (venue) next.venue = venue.replace(/^장소\s*[:：]?/, '');
+    if (date) { const match = date.replace(/[년월]/g, '.').match(/(20\d{2})\D+(\d{1,2})\D+(\d{1,2})/), times = date.match(/\d{1,2}:\d{2}/g); if (match) next.date = `${match[1]}-${match[2].padStart(2, '0')}-${match[3].padStart(2, '0')}`; if (times?.[0]) next.start = times[0]; if (times?.[1]) next.end = times[1]; }
+    save(next);
+  };
+  const image = (event: ChangeEvent<HTMLInputElement>, background: boolean) => { const file = event.target.files?.[0]; if (!file) return; const reader = new FileReader(); reader.onload = () => save(background ? { ...draft, background: String(reader.result) } : { ...draft, logos: [...draft.logos.slice(0, 3), String(reader.result)] }); reader.readAsDataURL(file); };
+  const downloadPng = () => { if (!canExport || busy) return; setBusy(true); const canvas = document.createElement('canvas'); draw(canvas, draft); canvas.toBlob(blob => { if (blob) { const anchor = document.createElement('a'); anchor.href = URL.createObjectURL(blob); anchor.download = `${clean(draft.name || draft.title)}.png`; anchor.click(); URL.revokeObjectURL(anchor.href); } setBusy(false); }, 'image/png'); };
+  const downloadPptx = async () => {
+    if (!canExport || busy) return; setBusy(true);
+    try {
+      const file = new pptxgen(); file.defineLayout({ name: 'OFFICIAL_LED', width: PPT.width, height: PPT.height }); file.layout = 'OFFICIAL_LED'; const slide = file.addSlide(); slide.background = { color: palette.background.slice(1) };
+      for (const shape of cfg.decorations) if (shape.type !== 'gradient') slide.addShape(file.ShapeType.rect, { x: shape.x / 100 * PPT.width, y: shape.y / 100 * PPT.ledHeight, w: shape.w / 100 * PPT.width, h: Math.max(.01, shape.h / 100 * PPT.ledHeight), fill: { color: (palette[shape.color] || shape.color || palette.line).slice(1) }, line: { transparency: 100 } });
+      const plan = titlePlan(draft.title, draft.template, draft.size), x = (key: ElementKey, width: number) => Math.max(0, Math.min(PPT.width - width, positions[key].x / 100 * PPT.width - (cfg.layout.align === 'center' ? width / 2 : 0))), y = (key: ElementKey, height: number) => Math.max(0, Math.min(PPT.ledHeight - height, positions[key].y / 100 * PPT.ledHeight));
+      slide.addText(plan.lines.join('\n'), { x: x('title', cfg.layout.titleWidth / 100 * PPT.width), y: y('title', plan.height / 256 * PPT.ledHeight), w: cfg.layout.titleWidth / 100 * PPT.width, h: plan.height / 256 * PPT.ledHeight, fontFace: draft.font, fontSize: Math.max(18, plan.size * .38), bold: true, color: palette.title.slice(1), margin: 0, fit: 'shrink', align: cfg.layout.align, breakLine: false });
+      if (draft.subtitle) slide.addText(draft.subtitle, { x: x('subtitle', 7), y: y('subtitle', .12), w: 7, h: .12, fontFace: draft.font, fontSize: 7.5, bold: true, color: palette.subtitle.slice(1), margin: 0, fit: 'shrink', align: cfg.layout.align });
+      slide.addText([dateLine(draft), draft.venue].filter(Boolean).join('  ·  '), { x: x('meta', 7.3), y: y('meta', .12), w: 7.3, h: .12, fontFace: draft.font, fontSize: 8, color: palette.meta.slice(1), margin: 0, fit: 'shrink', align: cfg.layout.align });
+      slide.addText([draft.host, draft.organizer].filter(Boolean).join('  |  '), { x: 6.8, y: y('host', .12), w: 2.9, h: .12, fontFace: draft.font, fontSize: 6.4, bold: true, color: palette.meta.slice(1), margin: 0, fit: 'shrink', align: 'right' });
+      await file.writeFile({ fileName: `${clean(draft.name || draft.title)}_수정용.pptx` }); setNotice('PPTX 생성 완료');
+    } finally { setBusy(false); }
+  };
+  const saveJson = () => { const anchor = document.createElement('a'); anchor.href = URL.createObjectURL(new Blob([JSON.stringify({ version: 3, draft }, null, 2)], { type: 'application/json' })); anchor.download = `${clean(draft.name || draft.title)}.json`; anchor.click(); };
+  const loadJson = (event: ChangeEvent<HTMLInputElement>) => { const file = event.target.files?.[0]; if (!file) return; const reader = new FileReader(); reader.onload = () => { try { const value = JSON.parse(String(reader.result)); save({ ...defaults(), ...(value.draft || value) }); } catch { setNotice('작업 JSON을 읽지 못했습니다'); } }; reader.readAsText(file); };
+  const undo = () => { if (!history.length) return; setFuture(items => [draft, ...items]); setDraft(history[0]); setHistory(items => items.slice(1)); }, redo = () => { if (!future.length) return; setHistory(items => [draft, ...items]); setDraft(future[0]); setFuture(items => items.slice(1)); };
+  const cards = (group: string) => TEMPLATE_IDS.filter(id => TEMPLATES[id].group === group);
+  return <main className="app-shell">
+    <header className="app-header"><div className="brand-mark"><span className="h">H</span><span>HANYANG UNIVERSITY<br /><b>ERICA</b></span></div><div><p className="eyebrow">FACILITY OPERATIONS TOOL · v2.1</p><h1>컨퍼런스홀 LED 현수막 제작기</h1></div><div className="header-status">2560 × 256 · 공식 PPTX 규격</div></header>
+    <div className="workspace"><aside className="editor-panel">
+      <section className="paste-panel"><div className="section-title"><b>QUICK START</b><span>행사명 · 일시 · 장소</span></div><textarea value={pasted} onChange={event => setPasted(event.target.value)} placeholder={'행사명\n2026. 9. 15. 14:00~17:00\n컨퍼런스홀 중강당'} /><button className="ghost-button" onClick={parse}>정보 자동 분리</button><label>행사명<input value={draft.title} onChange={event => update('title', event.target.value)} /></label><div className="field-row"><label>날짜<input type="date" value={draft.date} onChange={event => update('date', event.target.value)} /></label><label>시작<input type="time" value={draft.start} onChange={event => update('start', event.target.value)} /></label></div><label>장소<input value={draft.venue} onChange={event => update('venue', event.target.value)} /></label></section>
+      {['ERICA MODERN', '시설팀 기존 양식'].map(group => <section className="input-section" key={group}><div className="section-heading"><b>{group}</b><em>{cards(group).length}종</em></div><div className="template-grid">{cards(group).map(id => <button className={`template-card ${id} ${draft.template === id ? 'active' : ''}`} onClick={() => switchTemplate(id)} key={id}><i style={{ background: `linear-gradient(90deg,${TEMPLATES[id].palette.background} 64%,${TEMPLATES[id].palette.accent} 64%)` }} /><strong>{TEMPLATES[id].name}</strong><small>{TEMPLATES[id].use}</small></button>)}</div></section>)}
+      <section className="accordion"><button onClick={() => setAdvanced(!advanced)}><span>고급 편집</span><ChevronDown size={17} /></button>{advanced && <div className="accordion-content"><label>부제<input value={draft.subtitle} onChange={event => update('subtitle', event.target.value)} /></label><label>종료 시간<input type="time" value={draft.end} onChange={event => update('end', event.target.value)} /></label><label>주최<input value={draft.host} onChange={event => update('host', event.target.value)} /></label><label>주관<input value={draft.organizer} onChange={event => update('organizer', event.target.value)} /></label><div className="field-row"><label>글꼴<select value={draft.font} onChange={event => update('font', event.target.value)}><option>Arial</option><option>Malgun Gothic</option><option>Georgia</option></select></label><label>제목 크기<input type="range" min="34" max="100" value={draft.size || cfg.layout.fontSize} onChange={event => update('size', Number(event.target.value))} /></label></div><div className="field-row"><label>제목색<input type="color" value={palette.title} onChange={event => update('paletteOverride', { ...draft.paletteOverride, title: event.target.value })} /></label><label>정보색<input type="color" value={palette.meta} onChange={event => update('paletteOverride', { ...draft.paletteOverride, meta: event.target.value })} /></label></div><label className="keep"><input type="checkbox" checked={draft.keepSettings} onChange={event => update('keepSettings', event.target.checked)} /> 템플릿 변경 시 내 설정 유지</label><label>배경 사진<input type="file" accept="image/*" onChange={event => image(event, true)} /></label><label>외부기관 로고<input type="file" accept="image/*" onChange={event => image(event, false)} /></label><div className="lock-row"><button onClick={() => update('locked', !draft.locked)}>{draft.locked ? <Lock size={15} /> : <LockOpen size={15} />}{draft.locked ? '잠금 해제' : '전체 잠금'}</button><button onClick={resetPosition}>현재 템플릿 위치 초기화</button></div></div>}</section>
+      <section className="work-tools"><input ref={workFile} type="file" hidden accept=".json,application/json" onChange={loadJson} /><button onClick={saveJson}><Save size={14} /> JSON 저장</button><button onClick={() => workFile.current?.click()}><Upload size={14} /> 불러오기</button><button onClick={undo} disabled={!history.length}><Undo2 size={14} /> Undo</button><button onClick={redo} disabled={!future.length}><Redo2 size={14} /> Redo</button></section>
+    </aside><section className="preview-panel"><div className="preview-toolbar"><div><p className="eyebrow">LIVE PREVIEW</p><h2>실제 송출 영역</h2></div><label className="safe-toggle"><input type="checkbox" checked={safe} onChange={event => setSafe(event.target.checked)} /> 안전영역 보기</label></div><Preview draft={draft} onMove={move} />{safe && <div className="safe-guide">공식 PPTX 상단 LED 송출영역 · 10:1</div>}<div className="preview-caption"><b>{cfg.name}</b><span>템플릿별 위치·색상·장식 독립 적용</span></div><details className="check-panel" open={!canExport}><summary>{canExport ? '✓ 출력 준비 완료' : '! 출력 전 확인 필요'}</summary>{checks.map(item => <div className={`check-item ${item.ok ? '' : 'warning'}`} key={item.name}>{item.ok ? <Check size={16} /> : <AlertTriangle size={16} />}<b>{item.name}</b><span>{item.value}</span></div>)}</details></section></div>
+    <footer className="action-bar"><input placeholder="출력 파일명 (선택)" value={draft.name} onChange={event => update('name', event.target.value)} /><button className="reset" onClick={() => { if (confirm('전체 초기화할까요?')) { setDraft(defaults()); setHistory([]); setFuture([]); } }}><RotateCcw size={17} /> 전체 초기화</button><button className="download secondary" disabled={!canExport || busy} onClick={downloadPptx}><FileText size={18} /> 수정 가능한 PPTX</button><button className="download" disabled={!canExport || busy} onClick={downloadPng}><FileImage size={18} /> PNG 다운로드</button></footer>
+    {notice && <p className="notice">{notice}</p>}<p className="facility-note">공식 LED: 6400 × 640mm · 2560 × 256px · PPTX 원본 슬라이드 크기 변경 금지 · 현장지원 4446</p>
+  </main>;
+}
