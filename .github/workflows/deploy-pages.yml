@@ -30,8 +30,9 @@ jobs:
       - name: Make framework assets Pages-safe
         run: |
           # GitHub Pages does not publish directories beginning with an underscore.
-          # Vinext nests its framework files below the configured project base path.
-          mv dist/client/conference-hall-led-maker/_next dist/client/conference-hall-led-maker/next-assets
+          # Vinext nests its framework files below the configured project base path,
+          # while Pages maps that URL prefix to the artifact root.
+          mv dist/client/conference-hall-led-maker/_next dist/client/next-assets
           find dist/client -type f \( -name '*.html' -o -name '*.js' -o -name '*.rsc' -o -name '*.json' \) -exec sed -i 's!/_next/!/next-assets/!g' {} +
           touch dist/client/.nojekyll
       - uses: actions/configure-pages@v5
