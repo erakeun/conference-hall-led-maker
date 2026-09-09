@@ -1,9 +1,10 @@
 import type { NextConfig } from 'next';
 
-const basePath = process.env.GITHUB_ACTIONS
-  ? '/conference-hall-led-maker'
-  : '';
-
-const nextConfig: NextConfig = { output: 'export', basePath };
+const nextConfig: NextConfig = {
+  output: 'export',
+  assetPrefix: process.env.GITHUB_ACTIONS
+    ? '/conference-hall-led-maker/'
+    : undefined,
+};
 
 export default nextConfig;
