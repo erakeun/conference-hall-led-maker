@@ -49,7 +49,7 @@ const paletteFor = (d: Draft) => TEMPLATES[d.template].palette;
 const contentFor = (d: Draft, element: ElementState) => {
   if (element.content !== undefined) return element.content;
   if (element.kind === 'date') return dateLine(d);
-  if (element.kind === 'venue') return d.venue ? `·  ${d.venue}` : '';
+  if (element.kind === 'venue') return d.venue;
   if (element.kind === 'organizer') return d.organizer ? `|  ${d.organizer}` : '';
   if (element.kind === 'logo' || element.kind === 'image') return '';
   if (element.kind === 'title') return d.title;
