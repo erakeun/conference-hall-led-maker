@@ -347,8 +347,8 @@ export default function Home() {
   const undo = () => { if (!history.length) return; setFuture(items => [draft, ...items]); setDraft(history[0]); setHistory(items => items.slice(1)); }, redo = () => { if (!future.length) return; setHistory(items => [draft, ...items]); setDraft(future[0]); setFuture(items => items.slice(1)); };
   const cards = (group: string) => templateIds.filter(id => TEMPLATES[id].group === group);
   const presetGroups = [
-    { id: 'recommended', title: '추천 내용 프리셋', note: '문구와 디자인을 한 번에 적용', items: contentPresets.filter(preset => !preset.collection) },
     { id: 'reference', title: '제공 예시 프리셋', note: '첨부 디자인과 예시 문구를 그대로 적용', items: contentPresets.filter(preset => preset.collection === 'reference') },
+    { id: 'recommended', title: '추천 내용 프리셋', note: '문구와 디자인을 한 번에 적용', items: contentPresets.filter(preset => !preset.collection) },
   ];
   const baseButtons = EDITABLE_KINDS.map(kind => elements.find((item: ElementState) => item.id === kind)).filter(Boolean) as ElementState[];
   const setFontSize = (value: number) => { if (!selectedElement || !selectedText) return; const limits = FONT_LIMITS[selectedElement.kind as keyof typeof FONT_LIMITS]; patchElement(selectedElement.id, { fontSize: Math.max(limits.min, Math.min(limits.max, value)) }); };
