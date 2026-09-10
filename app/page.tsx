@@ -23,11 +23,11 @@ type ElementState = { id: string; kind: ElementKind; x: number; y: number; width
 type ElementOverride = Partial<Omit<ElementState, 'id' | 'kind'>>;
 type Draft = {
   title: string; subtitle: string; date: string; start: string; end: string; venue: string; host: string; organizer: string; extra: string;
-  template: TemplateId; font: string; background: string | null; fit: 'cover' | 'contain'; logos: string[]; mode: 'simple' | 'edit';
+  template: TemplateId; font: string; background: string | null; backgroundSource: 'upload' | 'preset' | null; cleanBackground: boolean; presetLayout: Record<string, ElementOverride>; fit: 'cover' | 'contain'; logos: string[]; mode: 'simple' | 'edit';
   templateEdits: Partial<Record<TemplateId, Record<string, ElementOverride>>>; templateCopies: Partial<Record<TemplateId, ElementState[]>>;
   locked: boolean; name: string;
 };
-type ContentPreset = { id: string; name: string; eyebrow: string; template: TemplateId; accent: string; fields: Pick<Draft, 'title' | 'subtitle' | 'date' | 'start' | 'end' | 'venue' | 'host' | 'organizer' | 'extra'> };
+type ContentPreset = { id: string; name: string; eyebrow: string; collection?: 'reference'; template: TemplateId; accent: string; theme?: 'light' | 'dark'; asset?: string; layout?: Record<string, ElementOverride>; fields: Pick<Draft, 'title' | 'subtitle' | 'date' | 'start' | 'end' | 'venue' | 'host' | 'organizer' | 'extra'> };
 type Guide = { axis: 'x' | 'y'; value: number };
 type Gesture = { type: 'move' | 'resize'; id: string; offsetX: number; offsetY: number; startX: number; startWidth: number; original: Draft };
 const templateIds = TEMPLATE_IDS as TemplateId[];
@@ -35,7 +35,7 @@ const contentPresets = CONTENT_PRESETS as ContentPreset[];
 
 const defaults = (): Draft => ({
   title: '2026 ERICA INNOVATION FORUM', subtitle: '', date: '2026-09-09', start: '14:00', end: '', venue: '컨퍼런스홀 중강당',
-  host: 'HANYANG UNIVERSITY ERICA', organizer: '', extra: '', template: 'standard', font: 'Arial', background: null, fit: 'cover', logos: [],
+  host: 'HANYANG UNIVERSITY ERICA', organizer: '', extra: '', template: 'standard', font: 'Arial', background: null, backgroundSource: null, cleanBackground: false, presetLayout: {}, fit: 'cover', logos: [],
   mode: 'simple', templateEdits: {}, templateCopies: {}, locked: false, name: '',
 });
 const clean = (value: string) => value.replace(/[\\/:*?"<>|]/g, '').trim().replace(/\s+/g, '_').slice(0, 42) || 'LED_현수막';
@@ -62,7 +62,9 @@ const assetFor = (d: Draft, element: ElementState) => element.asset || (element.
 const colorForKind = (kind: ElementKind, palette: Record<string, string>) => kind === 'title' ? palette.title : ['date', 'venue', 'host', 'organizer'].includes(kind) ? palette.meta : palette.subtitle;
 
 function resolvedElements(d: Draft) {
-  const edits = d.mode === 'edit' ? d.templateEdits[d.template] || {} : {};
+  const manualEdits = d.mode === 'edit' ? d.templateEdits[d.template] || {} : {};
+  const editIds = new Set([...Object.keys(d.presetLayout || {}), ...Object.keys(manualEdits)]);
+  const edits = Object.fromEntries([...editIds].map(id => [id, { ...d.presetLayout?.[id], ...manualEdits[id] }]));
   const copies = d.mode === 'edit' ? d.templateCopies[d.template] || [] : [];
   const palette = paletteFor(d);
   return materializeElements(d.template, edits, copies).map((element: ElementState) => {
@@ -121,9 +123,11 @@ async function draw(canvas: HTMLCanvasElement, d: Draft) {
   canvas.width = LED.width; canvas.height = LED.height; paintBase(ctx, d);
   const cfg = TEMPLATES[d.template], palette = paletteFor(d), elements = resolvedElements(d);
   const layers: Array<{ zIndex: number; type: string; element?: ElementState; shape?: Shape }> = elements.map((element: ElementState) => ({ zIndex: element.zIndex, type: 'element', element }));
-  if (d.template === 'photo') layers.push({ zIndex: 8, type: 'overlay' });
-  cfg.decorations.forEach((shape: Shape) => { if (shape.type !== 'gradient') layers.push({ zIndex: 10, type: 'shape', shape }); });
-  if (!d.template.startsWith('legacy')) layers.push({ zIndex: 15, type: 'brand' });
+  if (!d.cleanBackground) {
+    if (d.template === 'photo') layers.push({ zIndex: 8, type: 'overlay' });
+    cfg.decorations.forEach((shape: Shape) => { if (shape.type !== 'gradient') layers.push({ zIndex: 10, type: 'shape', shape }); });
+    if (!d.template.startsWith('legacy')) layers.push({ zIndex: 15, type: 'brand' });
+  }
   layers.sort((a, b) => a.zIndex - b.zIndex);
   for (const layer of layers) {
     if (layer.type === 'overlay') { ctx.fillStyle = `${palette.overlay}${Math.round((palette.overlayOpacity || .58) * 255).toString(16).padStart(2, '0')}`; ctx.fillRect(0, 0, LED.width, LED.height); continue; }
@@ -206,6 +210,7 @@ export default function Home() {
     try {
       const raw = localStorage.getItem('erica-led-v4') || localStorage.getItem('erica-led-v3') || localStorage.getItem('erica-led-v2');
       const old = raw ? JSON.parse(raw) : {}, migrated: Draft = { ...defaults(), ...old, mode: old.mode || 'simple', templateEdits: old.templateEdits || {}, templateCopies: old.templateCopies || {} };
+      if (!old.backgroundSource && old.background) migrated.backgroundSource = 'upload';
       if (old.customPositions) {
         for (const [template, positions] of Object.entries(old.customPositions) as Array<[TemplateId, Record<string, { x: number; y: number }> ]>) {
           const bases = Object.fromEntries((elementDefaults(template) as ElementState[]).map(item => [item.id, item]));
@@ -217,7 +222,11 @@ export default function Home() {
         }
       }
       const params = new URLSearchParams(window.location.search), requested = params.get('template');
-      if (requested && templateIds.includes(requested as TemplateId)) migrated.template = requested as TemplateId;
+      if (requested && templateIds.includes(requested as TemplateId)) {
+        const requestedTemplate = requested as TemplateId;
+        if (requestedTemplate !== migrated.template && migrated.backgroundSource === 'preset') { migrated.background = null; migrated.backgroundSource = null; migrated.cleanBackground = false; migrated.presetLayout = {}; }
+        migrated.template = requestedTemplate;
+      }
       if (params.get('title')) migrated.title = params.get('title')!;
       if (params.get('mode') === 'edit' || params.get('mode') === 'simple') migrated.mode = params.get('mode') as Draft['mode'];
       // oxlint-disable-next-line react/react-compiler
@@ -268,12 +277,23 @@ export default function Home() {
     { name: '기본 템플릿', ok: !validation.clipping && !validation.collision, value: !validation.clipping && !validation.collision ? '회귀 없음' : '기본 배치 확인 필요' },
   ];
   const canExport = !warnings.overflow;
-  const switchTemplate = (template: TemplateId) => { save({ ...draft, template }); setSelected(null); };
-  const applyPreset = (preset: ContentPreset) => {
+  const switchTemplate = (template: TemplateId) => {
+    const clearPresetAsset = draft.backgroundSource === 'preset';
+    save({ ...draft, template, background: clearPresetAsset ? null : draft.background, backgroundSource: clearPresetAsset ? null : draft.backgroundSource, cleanBackground: false, presetLayout: {} }); setSelected(null);
+  };
+  const applyPreset = async (preset: ContentPreset) => {
     const templateEdits = { ...draft.templateEdits }, templateCopies = { ...draft.templateCopies };
     delete templateEdits[preset.template]; delete templateCopies[preset.template];
-    save({ ...draft, ...preset.fields, template: preset.template, mode: 'simple', templateEdits, templateCopies });
-    setSelected(null); setNotice(`${preset.name} 프리셋을 적용했습니다`);
+    let background = draft.background, backgroundSource = draft.backgroundSource;
+    try {
+      if (preset.asset) {
+        setBusy(true); const response = await fetch(new URL(preset.asset, window.location.href)); if (!response.ok) throw new Error('asset'); const blob = await response.blob();
+        background = await new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : ''); reader.onerror = reject; reader.readAsDataURL(blob); });
+        backgroundSource = 'preset';
+      } else if (backgroundSource === 'preset') { background = null; backgroundSource = null; }
+      save({ ...draft, ...preset.fields, template: preset.template, mode: 'simple', background, backgroundSource, cleanBackground: Boolean(preset.asset), presetLayout: preset.layout || {}, templateEdits, templateCopies });
+      setSelected(null); setNotice(`${preset.name} 프리셋을 적용했습니다`);
+    } catch { setNotice('프리셋 배경을 불러오지 못했습니다'); } finally { setBusy(false); }
   };
   const resetElementPosition = () => {
     if (!selectedElement) return; clearElementFields(selectedElement.id, ['x', 'y', 'width', 'height']);
@@ -301,14 +321,14 @@ export default function Home() {
     if (date) { const match = date.replace(/[년월]/g, '.').match(/(20\d{2})\D+(\d{1,2})\D+(\d{1,2})/), times = date.match(/\d{1,2}:\d{2}/g); if (match) next.date = `${match[1]}-${match[2].padStart(2, '0')}-${match[3].padStart(2, '0')}`; if (times?.[0]) next.start = times[0]; if (times?.[1]) next.end = times[1]; }
     save(next);
   };
-  const image = (event: ChangeEvent<HTMLInputElement>, background: boolean) => { const file = event.target.files?.[0]; if (!file) return; const reader = new FileReader(); reader.onload = () => { const value = typeof reader.result === 'string' ? reader.result : '', next = background ? { ...draft, background: value } : { ...draft, logos: [value] }; save(next); setSelected(background ? 'image' : 'logo'); }; reader.readAsDataURL(file); };
+  const image = (event: ChangeEvent<HTMLInputElement>, background: boolean) => { const file = event.target.files?.[0]; if (!file) return; const reader = new FileReader(); reader.onload = () => { const value = typeof reader.result === 'string' ? reader.result : '', next = background ? { ...draft, background: value, backgroundSource: 'upload' as const, cleanBackground: false, presetLayout: {} } : { ...draft, logos: [value] }; save(next); setSelected(background ? 'image' : 'logo'); }; reader.readAsDataURL(file); };
   const downloadPng = async () => { if (!canExport || busy) return; setBusy(true); const canvas = document.createElement('canvas'); await draw(canvas, draft); canvas.toBlob(blob => { if (blob) { const anchor = document.createElement('a'); anchor.href = URL.createObjectURL(blob); anchor.download = `${clean(draft.name || draft.title)}.png`; anchor.click(); URL.revokeObjectURL(anchor.href); } setBusy(false); }, 'image/png'); };
   const downloadPptx = async () => {
     if (!canExport || busy) return; setBusy(true);
     try {
       const file = new pptxgen(); file.defineLayout({ name: 'OFFICIAL_LED', width: PPT.width, height: PPT.height }); file.layout = 'OFFICIAL_LED'; const slide = file.addSlide(); slide.background = { color: palette.background.slice(1) };
       const ordered: Array<{ zIndex: number; type: string; element?: ElementState; shape?: Shape }> = elements.map((element: ElementState) => ({ zIndex: element.zIndex, type: 'element', element }));
-      if (draft.template === 'photo') ordered.push({ zIndex: 8, type: 'overlay' }); cfg.decorations.forEach((shape: Shape) => { if (shape.type !== 'gradient') ordered.push({ zIndex: 10, type: 'shape', shape }); });
+      if (!draft.cleanBackground) { if (draft.template === 'photo') ordered.push({ zIndex: 8, type: 'overlay' }); cfg.decorations.forEach((shape: Shape) => { if (shape.type !== 'gradient') ordered.push({ zIndex: 10, type: 'shape', shape }); }); }
       ordered.sort((a, b) => a.zIndex - b.zIndex);
       for (const layer of ordered) {
         if (layer.type === 'overlay') { slide.addShape(file.ShapeType.rect, { x: 0, y: 0, w: PPT.width, h: PPT.ledHeight, fill: { color: palette.overlay.slice(1), transparency: Math.round((1 - (palette.overlayOpacity || .58)) * 100) }, line: { transparency: 100 } }); continue; }
@@ -326,13 +346,17 @@ export default function Home() {
   const loadJson = (event: ChangeEvent<HTMLInputElement>) => { const file = event.target.files?.[0]; if (!file) return; const reader = new FileReader(); reader.onload = () => { try { const source = typeof reader.result === 'string' ? reader.result : '', value = JSON.parse(source), loaded = value.draft || value; save({ ...defaults(), ...loaded, templateEdits: loaded.templateEdits || {}, templateCopies: loaded.templateCopies || {} }); setNotice('작업 상태를 불러왔습니다'); } catch { setNotice('작업 JSON을 읽지 못했습니다'); } }; reader.readAsText(file); };
   const undo = () => { if (!history.length) return; setFuture(items => [draft, ...items]); setDraft(history[0]); setHistory(items => items.slice(1)); }, redo = () => { if (!future.length) return; setHistory(items => [draft, ...items]); setDraft(future[0]); setFuture(items => items.slice(1)); };
   const cards = (group: string) => templateIds.filter(id => TEMPLATES[id].group === group);
+  const presetGroups = [
+    { id: 'recommended', title: '추천 내용 프리셋', note: '문구와 디자인을 한 번에 적용', items: contentPresets.filter(preset => !preset.collection) },
+    { id: 'reference', title: '제공 예시 프리셋', note: '첨부 디자인과 예시 문구를 그대로 적용', items: contentPresets.filter(preset => preset.collection === 'reference') },
+  ];
   const baseButtons = EDITABLE_KINDS.map(kind => elements.find((item: ElementState) => item.id === kind)).filter(Boolean) as ElementState[];
   const setFontSize = (value: number) => { if (!selectedElement || !selectedText) return; const limits = FONT_LIMITS[selectedElement.kind as keyof typeof FONT_LIMITS]; patchElement(selectedElement.id, { fontSize: Math.max(limits.min, Math.min(limits.max, value)) }); };
   return <main className="app-shell">
     <header className="app-header"><div className="brand-mark"><span className="h">H</span><span>HANYANG UNIVERSITY<br /><b>ERICA</b></span></div><div><p className="eyebrow">FACILITY OPERATIONS TOOL · v2.2</p><h1>컨퍼런스홀 LED 현수막 제작기</h1></div><div className="header-status">2560 × 256 · 공식 PPTX 규격</div></header>
     <div className="workspace"><aside className="editor-panel">
       <section className="paste-panel"><div className="section-title"><b>QUICK START</b><span>행사명 · 일시 · 장소</span></div><textarea value={pasted} onChange={event => setPasted(event.target.value)} placeholder={'행사명\n2026. 9. 15. 14:00~17:00\n컨퍼런스홀 중강당'} /><button className="ghost-button" onClick={parse}>정보 자동 분리</button><label>행사명<input value={draft.title} onChange={event => update('title', event.target.value)} /></label><div className="field-row"><label>날짜<input type="date" value={draft.date} onChange={event => update('date', event.target.value)} /></label><label>시작<input type="time" value={draft.start} onChange={event => update('start', event.target.value)} /></label></div><label>장소<input value={draft.venue} onChange={event => update('venue', event.target.value)} /></label></section>
-      <section className="preset-section"><div className="section-heading"><div><b>추천 내용 프리셋</b><span>문구와 디자인을 한 번에 적용</span></div><em>{contentPresets.length}종</em></div><div className="preset-grid">{contentPresets.map(preset => <button className="content-preset" style={{ borderTopColor: preset.accent }} onClick={() => applyPreset(preset)} key={preset.id}><span>{preset.eyebrow}</span><strong>{preset.fields.title}</strong><small><i style={{ background: preset.accent }} />{preset.name} · {TEMPLATES[preset.template].name}</small></button>)}</div></section>
+      {presetGroups.map(group => <section className={`preset-section ${group.id}`} key={group.id}><div className="section-heading"><div><b>{group.title}</b><span>{group.note}</span></div><em>{group.items.length}종</em></div><div className="preset-grid">{group.items.map(preset => <button disabled={busy} className={`content-preset ${preset.asset ? `has-asset ${preset.theme}` : ''}`} style={{ borderTopColor: preset.accent, ...(preset.asset ? { backgroundImage: `linear-gradient(${preset.theme === 'dark' ? 'rgba(3,24,63,.2)' : 'rgba(255,255,255,.68)'},${preset.theme === 'dark' ? 'rgba(3,24,63,.2)' : 'rgba(255,255,255,.82)'}),url(./${preset.asset})` } : {}) }} onClick={() => void applyPreset(preset)} key={preset.id}><span>{preset.eyebrow}</span><strong>{preset.fields.title}</strong><small><i style={{ background: preset.accent }} />{preset.name} · {TEMPLATES[preset.template].name}</small></button>)}</div></section>)}
       {['ERICA MODERN', '시설팀 기존 양식'].map(group => <section className="input-section" key={group}><div className="section-heading"><b>{group}</b><em>{cards(group).length}종</em></div><div className="template-grid">{cards(group).map(id => <button className={`template-card ${id} ${draft.template === id ? 'active' : ''}`} onClick={() => switchTemplate(id)} key={id}><i style={{ background: `linear-gradient(90deg,${TEMPLATES[id].palette.background} 64%,${TEMPLATES[id].palette.accent} 64%)` }} /><strong>{TEMPLATES[id].name}</strong><small>{TEMPLATES[id].use}</small></button>)}</div></section>)}
       <section className="accordion"><button onClick={() => setAdvanced(!advanced)}><span>내용 및 이미지</span><ChevronDown className={advanced ? 'open' : ''} size={17} /></button>{advanced && <div className="accordion-content"><label>부제<input value={draft.subtitle} onChange={event => update('subtitle', event.target.value)} /></label><label>종료 시간<input type="time" value={draft.end} onChange={event => update('end', event.target.value)} /></label><label>주최<input value={draft.host} onChange={event => update('host', event.target.value)} /></label><label>주관<input value={draft.organizer} onChange={event => update('organizer', event.target.value)} /></label><label>추가 문구<input value={draft.extra} onChange={event => update('extra', event.target.value)} /></label><label>글꼴<select value={draft.font} onChange={event => update('font', event.target.value)}><option>Arial</option><option>Malgun Gothic</option><option>Georgia</option></select></label><label>배경/키비주얼<input type="file" accept="image/*" onChange={event => image(event, true)} /></label><label>외부기관 로고<input type="file" accept="image/*" onChange={event => image(event, false)} /></label></div>}</section>
       <section className="work-tools"><input ref={workFile} type="file" hidden accept=".json,application/json" onChange={loadJson} /><button onClick={saveJson}><Save size={14} /> JSON 저장</button><button onClick={() => workFile.current?.click()}><Upload size={14} /> 불러오기</button><button onClick={undo} disabled={!history.length}><Undo2 size={14} /> Undo</button><button onClick={redo} disabled={!future.length}><Redo2 size={14} /> Redo</button></section>

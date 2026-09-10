@@ -41,6 +41,12 @@
 }
 .content-preset > small { display: flex; align-items: center; gap: 5px; color: #708596; font-size: 8px; font-weight: 700; }
 .content-preset > small i { width: 6px; height: 6px; border-radius: 50%; }
+.preset-section.reference { padding-top: 20px; border-top: 1px solid #e1e8ed; }
+.content-preset.has-asset { background-position: center; background-size: cover; }
+.content-preset.has-asset.dark > span,
+.content-preset.has-asset.dark > strong,
+.content-preset.has-asset.dark > small { color: #fff; text-shadow: 0 1px 3px rgba(0, 20, 55, .7); }
+.content-preset:disabled { cursor: wait; }
 
 .led-stage {
   touch-action: none;
