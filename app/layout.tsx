@@ -23,7 +23,11 @@ export default function RootLayout({
           gtag('config', 'G-REQY4913H3');
         `}</Script>
       </head>
-      <body>{children}</body>
+      <body><div className="mach-home-nav mach-screen-bar" data-html2canvas-ignore="true">
+  <a className="mach-home-link" href="https://erakeun.github.io/ERICAAI/" aria-label="MACH 홈으로 이동">
+    <img src="assets/mach-three-speed-lines.png" alt="MACH" decoding="async" />
+  </a>
+</div>{children}</body>
     </html>
   );
 }
